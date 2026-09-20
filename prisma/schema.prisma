@@ -1,0 +1,68 @@
+// Prisma Schema for Taekwondo Weigh-In Management System
+// Configured with SQLite for local development and zero-configuration on Windows
+// For PostgreSQL production target: change provider to "postgresql" and add native enum declarations
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Participant {
+  id              String           @id @default(cuid())
+  lotNumber       String           @unique
+  athleteName     String
+  academyName     String
+  gender          String           // MALE or FEMALE
+  division        String           // e.g. Senior, Junior, Cadet
+  ageGroup        String           // e.g. 18+, 15-17
+  category        String           // e.g. Kyorugi, Poomsae
+  weightCategory  String           // e.g. Under 54 KG, -58 KG
+  athleteId       String?
+  currentStatus   String           @default("PENDING") // PENDING, HOLD, PASSED, REJECTED
+  currentWeight   Float?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  attempts        WeighInAttempt[]
+  auditLogs       AuditLog[]
+
+  @@index([currentStatus])
+  @@index([gender, division, category, weightCategory])
+  @@index([academyName])
+}
+
+model WeighInAttempt {
+  id              String       @id @default(cuid())
+  participantId   String
+  participant     Participant  @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  attemptNumber   Int
+  weight          Float
+  status          String       // PENDING, HOLD, PASSED, REJECTED
+  operatorId      String       @default("OP-01")
+  notes           String?
+  weighedAt       DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+
+  @@index([participantId])
+  @@index([weighedAt])
+}
+
+model AuditLog {
+  id              String       @id @default(cuid())
+  participantId   String
+  participant     Participant  @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  action          String       // STATUS_CHANGE, RE_WEIGH, PARTICIPANT_EDIT, RECOVERY
+  previousStatus  String
+  newStatus       String
+  weight          Float?
+  operatorId      String       @default("OP-01")
+  details         String?
+  timestamp       DateTime     @default(now())
+
+  @@index([participantId])
+  @@index([timestamp])
+}
