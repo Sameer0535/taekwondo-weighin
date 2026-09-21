@@ -109,8 +109,9 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Failed to record weigh-in:", error);
     return NextResponse.json(
-      { success: false, error: "Internal server error recording weigh-in." },
+      { success: false, error: error?.message || "Internal server error recording weigh-in." },
       { status: 500 }
     );
   }
 }
+

@@ -208,8 +208,9 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Failed to create participant:", error);
     return NextResponse.json(
-      { success: false, error: "Internal server error creating participant." },
+      { success: false, error: error?.message || "Internal server error creating participant." },
       { status: 500 }
     );
   }
 }
+

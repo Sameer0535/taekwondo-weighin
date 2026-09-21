@@ -184,8 +184,9 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Bulk import failed:", error);
     return NextResponse.json(
-      { success: false, error: "Internal server error during bulk import." },
+      { success: false, error: error?.message || "Internal server error during bulk import." },
       { status: 500 }
     );
   }
 }
+
