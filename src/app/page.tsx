@@ -21,10 +21,13 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadStats = useCallback(async () => {
-    setLoading(true);
+  const loadStats = useCallback(async (showLoader = false) => {
+    if (showLoader) setLoading(true);
     try {
-      const res = await fetch("/api/dashboard/stats");
+      const res = await fetch(`/api/dashboard/stats?_t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       const json = await res.json();
       if (json.success) {
         setStats(json.data);
@@ -32,13 +35,30 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Failed to load dashboard stats:", err);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   }, []);
 
+  // Initial load
   useEffect(() => {
-    loadStats();
+    loadStats(true);
   }, [loadStats]);
+
+  // Real-time synchronization across multiple systems (every 4s + on focus)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadStats(false);
+    }, 4000);
+
+    const onFocus = () => loadStats(false);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [loadStats]);
+
 
   if (loading) {
     return (

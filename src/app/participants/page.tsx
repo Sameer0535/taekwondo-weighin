@@ -25,15 +25,19 @@ export default function CompetitorsPage() {
   const [divisionFilter, setDivisionFilter] = useState("ALL");
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
 
-  const fetchParticipants = useCallback(async () => {
-    setLoading(true);
+  const fetchParticipants = useCallback(async (showLoader = false) => {
+    if (showLoader) setLoading(true);
     try {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       if (statusFilter !== "ALL") params.set("status", statusFilter);
       if (divisionFilter !== "ALL") params.set("division", divisionFilter);
+      params.set("_t", Date.now().toString());
 
-      const res = await fetch(`/api/participants?${params.toString()}`);
+      const res = await fetch(`/api/participants?${params.toString()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       const json = await res.json();
       if (json.success) {
         setParticipants(json.data);
@@ -41,16 +45,33 @@ export default function CompetitorsPage() {
     } catch (err) {
       console.error("Failed to fetch participants:", err);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   }, [search, statusFilter, divisionFilter]);
 
+  // Initial load & search debounce
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchParticipants();
+      fetchParticipants(true);
     }, 200);
     return () => clearTimeout(timer);
   }, [fetchParticipants]);
+
+  // Real-time synchronization across multiple systems (every 4 seconds + on window focus)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchParticipants(false);
+    }, 4000);
+
+    const onFocus = () => fetchParticipants(false);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [fetchParticipants]);
+
 
   const handleDelete = async (p: Participant) => {
     if ((p.attempts?.length || 0) > 0) {
@@ -138,6 +159,7 @@ export default function CompetitorsPage() {
                 className="bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1 focus:outline-none"
               >
                 <option value="ALL">All Divisions</option>
+                <option value="Dasara">Dasara</option>
                 <option value="Senior">Senior</option>
                 <option value="Junior">Junior</option>
                 <option value="Cadet">Cadet</option>

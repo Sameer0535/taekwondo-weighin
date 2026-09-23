@@ -68,7 +68,10 @@ function WeighInContent() {
   // 1. Fetch categories on mount
   const loadCategories = useCallback(async () => {
     try {
-      const res = await fetch("/api/categories");
+      const res = await fetch(`/api/categories?_t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       const json = await res.json();
       if (json.success && json.data.length > 0) {
         setCategories(json.data);
@@ -91,10 +94,14 @@ function WeighInContent() {
       division: parsed.division,
       category: parsed.category,
       weightCategory: parsed.weightCategory,
+      _t: Date.now().toString(),
     });
 
     try {
-      const res = await fetch(`/api/participants?${query.toString()}`);
+      const res = await fetch(`/api/participants?${query.toString()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       const json = await res.json();
       if (json.success) {
         const athletes = json.data as Participant[];

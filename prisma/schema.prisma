@@ -3,7 +3,7 @@
 // For PostgreSQL production target: change provider to "postgresql" and add native enum declarations
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

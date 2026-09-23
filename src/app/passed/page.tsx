@@ -17,8 +17,8 @@ export default function PassedAthletesPage() {
   const [loading, setLoading] = useState(true);
 
   // Fetch passed athletes
-  const loadPassed = useCallback(async () => {
-    setLoading(true);
+  const loadPassed = useCallback(async (showLoader = false) => {
+    if (showLoader) setLoading(true);
     try {
       const params = new URLSearchParams();
       if (selectedCategoryId !== "ALL") {
@@ -27,8 +27,12 @@ export default function PassedAthletesPage() {
       if (academyFilter) {
         params.set("academy", academyFilter);
       }
+      params.set("_t", Date.now().toString());
 
-      const res = await fetch(`/api/passed?${params.toString()}`);
+      const res = await fetch(`/api/passed?${params.toString()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       const json = await res.json();
       if (json.success) {
         setPassedAthletes(json.data);
@@ -36,7 +40,7 @@ export default function PassedAthletesPage() {
     } catch (err) {
       console.error("Failed to fetch passed athletes:", err);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   }, [selectedCategoryId, academyFilter]);
 
@@ -44,7 +48,10 @@ export default function PassedAthletesPage() {
   useEffect(() => {
     async function getCats() {
       try {
-        const res = await fetch("/api/categories");
+        const res = await fetch(`/api/categories?_t=${Date.now()}`, {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
         const json = await res.json();
         if (json.success) {
           setCategories(json.data);
@@ -56,9 +63,26 @@ export default function PassedAthletesPage() {
     getCats();
   }, []);
 
+  // Initial load
   useEffect(() => {
-    loadPassed();
+    loadPassed(true);
   }, [loadPassed]);
+
+  // Real-time synchronization across multiple systems (every 4s + on focus)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadPassed(false);
+    }, 4000);
+
+    const onFocus = () => loadPassed(false);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [loadPassed]);
+
 
   const handlePrintAllPassed = () => {
     router.push("/print");

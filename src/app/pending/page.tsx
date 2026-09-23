@@ -14,10 +14,13 @@ export default function PendingHoldPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"ALL" | "HOLD" | "PENDING">("ALL");
 
-  const loadUnresolved = useCallback(async () => {
-    setLoading(true);
+  const loadUnresolved = useCallback(async (showLoader = false) => {
+    if (showLoader) setLoading(true);
     try {
-      const res = await fetch("/api/participants");
+      const res = await fetch(`/api/participants?_t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       const json = await res.json();
       if (json.success) {
         const unresolved = (json.data as Participant[]).filter(
@@ -28,13 +31,30 @@ export default function PendingHoldPage() {
     } catch (err) {
       console.error("Failed to load unresolved athletes:", err);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   }, []);
 
+  // Initial load
   useEffect(() => {
-    loadUnresolved();
+    loadUnresolved(true);
   }, [loadUnresolved]);
+
+  // Real-time synchronization across multiple systems (every 4s + on focus)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadUnresolved(false);
+    }, 4000);
+
+    const onFocus = () => loadUnresolved(false);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [loadUnresolved]);
+
 
   const filtered = athletes.filter((a) => {
     if (activeTab === "ALL") return true;
