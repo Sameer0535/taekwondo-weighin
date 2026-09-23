@@ -92,4 +92,19 @@ body {
     background-color: #F3F4F6 !important;
     font-weight: 700 !important;
   }
+
+  .category-print-group {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-bottom: 24px !important;
+  }
+
+  .print-document {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
 }
+

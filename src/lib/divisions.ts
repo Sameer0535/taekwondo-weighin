@@ -226,3 +226,30 @@ export function getWeightCategories(
   const g = gender.toUpperCase() === "FEMALE" ? "FEMALE" : "MALE";
   return div.weightCategories[g];
 }
+
+export function getDivisionSortRank(divisionIdOrName: string): number {
+  const div = getDivisionById(divisionIdOrName);
+  const idx = DIVISIONS.findIndex((d) => d.id === div.id);
+  return idx !== -1 ? idx : 999;
+}
+
+export function getWeightSortRank(
+  divisionIdOrName: string,
+  gender: string,
+  weightCategory: string
+): number {
+  const div = getDivisionById(divisionIdOrName);
+  const g = gender.toUpperCase() === "FEMALE" ? "FEMALE" : "MALE";
+  const categories = div.weightCategories[g] || [];
+
+  const normTarget = weightCategory.toLowerCase().replace(/\s+/g, "");
+  const idx = categories.findIndex(
+    (c) => c.label.toLowerCase().replace(/\s+/g, "") === normTarget
+  );
+  if (idx !== -1) return idx;
+
+  // Fallback to numeric value extracted from string (e.g. 45 from "Under 45kg")
+  const numMatch = weightCategory.match(/\d+(\.\d+)?/);
+  return numMatch ? parseFloat(numMatch[0]) : 999;
+}
+
