@@ -4,9 +4,19 @@ import React, { useState, useEffect, useCallback, useMemo, Suspense } from "reac
 import { useSearchParams, useRouter } from "next/navigation";
 import { Participant } from "@/types";
 import { Button } from "@/components/ui/Button";
-import { Printer, ArrowLeft, Loader2, Filter, Layers, Users } from "lucide-react";
+import {
+  Printer,
+  ArrowLeft,
+  Loader2,
+  Filter,
+  Layers,
+  Users,
+  FileSpreadsheet,
+  FileText,
+} from "lucide-react";
 import { parseCategoryId } from "@/lib/category-engine";
 import { DIVISIONS, getDivisionSortRank, getWeightSortRank } from "@/lib/divisions";
+import * as XLSX from "xlsx";
 
 interface CategoryGroup {
   key: string;
@@ -35,10 +45,13 @@ function PrintPassedContent() {
     setLoading(true);
     try {
       const url = categoryId
-        ? `/api/passed?categoryId=${encodeURIComponent(categoryId)}`
-        : "/api/passed";
+        ? `/api/passed?categoryId=${encodeURIComponent(categoryId)}&_t=${Date.now()}`
+        : `/api/passed?_t=${Date.now()}`;
 
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       const json = await res.json();
       if (json.success) {
         // Exclusively PASSED athletes
@@ -99,15 +112,12 @@ function PrintPassedContent() {
     // 2. Sort groups weight-wise in official Olympic tournament sequence
     const groups = Array.from(groupMap.values());
     groups.sort((a, b) => {
-      // Primary: Division rank (Sub-Junior -> Cadet -> Junior -> Senior -> Dasara)
       if (a.divisionRank !== b.divisionRank) {
         return a.divisionRank - b.divisionRank;
       }
-      // Secondary: Gender (MALE first, then FEMALE)
       if (a.gender !== b.gender) {
         return a.gender === "MALE" ? -1 : 1;
       }
-      // Tertiary: Weight Category rank (Under 45kg -> Under 50kg -> Above 82kg)
       if (a.weightRank !== b.weightRank) {
         return a.weightRank - b.weightRank;
       }
@@ -146,9 +156,134 @@ function PrintPassedContent() {
     window.print();
   };
 
+  // Export to Excel (.xlsx)
+  const handleDownloadExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const sheetData: (string | number)[][] = [
+      ["OFFICIAL WEIGH-IN ROSTER — PASSED ATHLETES"],
+      ["Certified for Official Draw, Pools & Tournament Fixtures"],
+      [`Date: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}`],
+      [], // blank line
+    ];
+
+    filteredGroups.forEach((group) => {
+      // Category Header row
+      sheetData.push([
+        `DIVISION: ${group.division.toUpperCase()} | GENDER: ${group.gender} | WEIGHT CATEGORY: ${group.weightCategory.toUpperCase()}`,
+        `(${group.athletes.length} Athletes)`
+      ]);
+      // Table Header row (Strictly Athlete Name and Academy Name)
+      sheetData.push(["Athlete Name", "Academy / Club Name"]);
+      // Athlete rows
+      group.athletes.forEach((athlete) => {
+        sheetData.push([athlete.athleteName, athlete.academyName]);
+      });
+      // Blank spacing row between categories
+      sheetData.push([]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+    ws["!cols"] = [{ wch: 38 }, { wch: 45 }];
+    XLSX.utils.book_append_sheet(wb, ws, "Passed Roster");
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Taekwondo_Passed_Roster_${dateStr}.xlsx`);
+  };
+
+  // Export to Microsoft Word (.doc)
+  const handleDownloadWord = () => {
+    const dateStr = new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+
+    let html = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head>
+        <meta charset='utf-8'>
+        <title>Official Weigh-In Roster</title>
+        <style>
+          body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #000; margin: 20mm; }
+          h1 { text-align: center; text-transform: uppercase; font-size: 16pt; margin: 0 0 4px 0; }
+          .sub { text-align: center; font-size: 9.5pt; color: #444; margin-bottom: 22px; font-weight: bold; }
+          .category-header { background-color: #E2E8F0; border: 2px solid #000; padding: 6px 12px; font-weight: bold; font-size: 11pt; margin-top: 20px; margin-bottom: 4px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+          th, td { border: 1px solid #000; padding: 7px 12px; text-align: left; }
+          th { background-color: #F1F5F9; font-weight: bold; font-size: 10.5pt; text-transform: uppercase; }
+          td { font-size: 10.5pt; }
+          .athlete-name { font-weight: bold; }
+          .sign-off { margin-top: 40px; border-top: 1px solid #000; padding-top: 12px; width: 100%; }
+        </style>
+      </head>
+      <body>
+        <h1>Official Weigh-In Roster &mdash; Passed Athletes</h1>
+        <div class="sub">Certified for Official Draw, Pools &amp; Tournament Fixtures &bull; Date: ${dateStr}</div>
+    `;
+
+    filteredGroups.forEach((group) => {
+      html += `
+        <div class="category-header">
+          DIVISION: ${group.division.toUpperCase()} &bull; GENDER: ${group.gender} &bull; WEIGHT CATEGORY: ${group.weightCategory.toUpperCase()} &nbsp;(${group.athletes.length} Athletes)
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 50%;">Athlete Name</th>
+              <th style="width: 50%;">Academy / Club Name</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      group.athletes.forEach((athlete) => {
+        html += `
+          <tr>
+            <td class="athlete-name">${athlete.athleteName}</td>
+            <td>${athlete.academyName}</td>
+          </tr>
+        `;
+      });
+
+      html += `
+          </tbody>
+        </table>
+      `;
+    });
+
+    html += `
+        <table class="sign-off" style="border: none; margin-top: 30px;">
+          <tr style="border: none;">
+            <td style="border: none; width: 50%; padding-top: 30px;">
+              <strong>Official Weigh-In Marshal:</strong><br><br>
+              _______________________________<br>
+              Signature / Stamp
+            </td>
+            <td style="border: none; width: 50%; text-align: right; padding-top: 30px;">
+              <strong>Tournament Jury / Director:</strong><br><br>
+              _______________________________<br>
+              Signature / Stamp
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Taekwondo_Passed_Roster_${new Date().toISOString().slice(0, 10)}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6">
-      {/* On-Screen Header & Controls (Class no-print ensures this is hidden in printed output) */}
+      {/* On-Screen Header & Controls (Hidden during print) */}
       <div className="no-print bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -162,29 +297,55 @@ function PrintPassedContent() {
             <div className="flex items-center gap-2">
               <Printer size={22} className="text-[#0052FF]" />
               <h1 className="text-xl font-black text-slate-900 tracking-tight">
-                Official Weigh-In Print Roster
+                Official Passed Athletes Roster
               </h1>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Weight-wise certified roster grouping athletes under their respective Division and Weight Category.
+              Weight-wise certified roster. Download in Word or Excel format, or print directly.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Export & Print Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Download Excel */}
             <Button
-              variant="success"
-              size="lg"
+              variant="outline"
+              size="md"
+              onClick={handleDownloadExcel}
+              disabled={loading || totalFilteredAthletes === 0}
+              className="gap-2 font-bold px-4 border-emerald-600 text-emerald-700 hover:bg-emerald-50 bg-white"
+            >
+              <FileSpreadsheet size={16} className="text-emerald-600" />
+              <span>Download Excel</span>
+            </Button>
+
+            {/* Download Word */}
+            <Button
+              variant="outline"
+              size="md"
+              onClick={handleDownloadWord}
+              disabled={loading || totalFilteredAthletes === 0}
+              className="gap-2 font-bold px-4 border-blue-600 text-blue-700 hover:bg-blue-50 bg-white"
+            >
+              <FileText size={16} className="text-blue-600" />
+              <span>Download Word</span>
+            </Button>
+
+            {/* Print */}
+            <Button
+              variant="primary"
+              size="md"
               onClick={handleTriggerPrint}
               disabled={loading || totalFilteredAthletes === 0}
-              className="gap-2 font-bold px-6 shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="gap-2 font-bold px-5 bg-slate-900 hover:bg-black text-white"
             >
-              <Printer size={18} />
-              <span>Print A4 Roster</span>
+              <Printer size={16} />
+              <span>Print Sheet</span>
             </Button>
           </div>
         </div>
 
-        {/* Filter Controls for Quick Printing */}
+        {/* Filter Controls */}
         <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3 sm:gap-4 text-xs">
           <div className="flex items-center gap-2">
             <Filter size={14} className="text-slate-400" />
@@ -292,38 +453,26 @@ function PrintPassedContent() {
                   </span>
                 </div>
 
-                {/* Athlete Details Table Below */}
+                {/* Athlete Details Table Below (Strictly Athlete Name and Academy Name ONLY) */}
                 <table className="print-table w-full border-collapse border border-black text-left text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-black">
-                      <th className="border border-black py-2 px-3 font-bold text-black uppercase w-12 text-center text-xs">
-                        #
-                      </th>
-                      <th className="border border-black py-2 px-4 font-bold text-black uppercase tracking-wider text-xs w-1/2">
+                      <th className="border border-black py-2.5 px-4 font-bold text-black uppercase tracking-wider text-xs w-1/2">
                         Athlete Name
                       </th>
-                      <th className="border border-black py-2 px-4 font-bold text-black uppercase tracking-wider text-xs w-1/2">
+                      <th className="border border-black py-2.5 px-4 font-bold text-black uppercase tracking-wider text-xs w-1/2">
                         Academy / Club Name
-                      </th>
-                      <th className="border border-black py-2 px-4 font-bold text-black uppercase tracking-wider text-xs text-center w-28">
-                        Status
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {group.athletes.map((athlete, idx) => (
+                    {group.athletes.map((athlete) => (
                       <tr key={athlete.id} className="border-b border-black">
-                        <td className="border border-black py-2 px-3 text-center font-bold text-gray-800 text-xs">
-                          {idx + 1}
-                        </td>
-                        <td className="border border-black py-2 px-4 font-bold text-black text-sm">
+                        <td className="border border-black py-2.5 px-4 font-bold text-black text-sm">
                           {athlete.athleteName}
                         </td>
-                        <td className="border border-black py-2 px-4 text-gray-900 font-medium text-sm">
+                        <td className="border border-black py-2.5 px-4 text-gray-900 font-medium text-sm">
                           {athlete.academyName}
-                        </td>
-                        <td className="border border-black py-2 px-4 text-center font-bold text-black text-xs">
-                          {athlete.currentWeight ? `${athlete.currentWeight.toFixed(2)} KG` : "PASSED"}
                         </td>
                       </tr>
                     ))}
