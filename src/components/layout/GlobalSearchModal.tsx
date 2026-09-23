@@ -87,8 +87,7 @@ export const GlobalSearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose 
                 onClose();
               }
             }}
-            placeholder="Search athlete by Name, Academy, or Category..."
-            className="flex-1 bg-transparent text-slate-900 placeholder-slate-400 text-sm font-medium focus:outline-none"
+            className="flex-1 bg-transparent text-slate-900 text-sm font-medium focus:outline-none"
           />
           {loading && <Loader2 size={18} className="animate-spin text-[#0052FF]" />}
           {query && !loading && (

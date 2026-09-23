@@ -36,6 +36,23 @@ function PrintPassedContent() {
 
   const [passedAthletes, setPassedAthletes] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [championshipTitle, setChampionshipTitle] = useState<string>(
+    "National Taekwondo Weigh-In Championship"
+  );
+
+  // Sync championship title from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("championship_title");
+      if (saved) setChampionshipTitle(saved);
+
+      const handleTitleUpdate = (e: any) => {
+        if (e.detail) setChampionshipTitle(e.detail);
+      };
+      window.addEventListener("championship_name_updated", handleTitleUpdate);
+      return () => window.removeEventListener("championship_name_updated", handleTitleUpdate);
+    }
+  }, []);
 
   // Filters for interactive on-screen view
   const [selectedDivision, setSelectedDivision] = useState<string>("ALL");
@@ -160,9 +177,10 @@ function PrintPassedContent() {
   const handleDownloadExcel = () => {
     const wb = XLSX.utils.book_new();
     const sheetData: (string | number)[][] = [
+      [championshipTitle.toUpperCase()],
       ["OFFICIAL WEIGH-IN ROSTER — PASSED ATHLETES"],
       ["Certified for Official Draw, Pools & Tournament Fixtures"],
-      [`Date: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}`],
+      [`Date: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })} | Total Athletes: ${totalFilteredAthletes}`],
       [], // blank line
     ];
 
@@ -186,11 +204,12 @@ function PrintPassedContent() {
     ws["!cols"] = [{ wch: 38 }, { wch: 45 }];
     XLSX.utils.book_append_sheet(wb, ws, "Passed Roster");
 
+    const safeTitle = championshipTitle.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 32);
     const dateStr = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `Taekwondo_Passed_Roster_${dateStr}.xlsx`);
+    XLSX.writeFile(wb, `${safeTitle}_Passed_Roster_${dateStr}.xlsx`);
   };
 
-  // Export to Microsoft Word (.doc)
+  // Export to Microsoft Word (.doc) with rock-solid WordHTML rendering identical to website
   const handleDownloadWord = () => {
     const dateStr = new Date().toLocaleDateString("en-US", {
       year: "numeric",
@@ -198,83 +217,168 @@ function PrintPassedContent() {
       day: "numeric",
     });
 
-    let html = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head>
-        <meta charset='utf-8'>
-        <title>Official Weigh-In Roster</title>
-        <style>
-          body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #000; margin: 20mm; }
-          h1 { text-align: center; text-transform: uppercase; font-size: 16pt; margin: 0 0 4px 0; }
-          .sub { text-align: center; font-size: 9.5pt; color: #444; margin-bottom: 22px; font-weight: bold; }
-          .category-header { background-color: #E2E8F0; border: 2px solid #000; padding: 6px 12px; font-weight: bold; font-size: 11pt; margin-top: 20px; margin-bottom: 4px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-          th, td { border: 1px solid #000; padding: 7px 12px; text-align: left; }
-          th { background-color: #F1F5F9; font-weight: bold; font-size: 10.5pt; text-transform: uppercase; }
-          td { font-size: 10.5pt; }
-          .athlete-name { font-weight: bold; }
-          .sign-off { margin-top: 40px; border-top: 1px solid #000; padding-top: 12px; width: 100%; }
-        </style>
-      </head>
-      <body>
-        <h1>Official Weigh-In Roster &mdash; Passed Athletes</h1>
-        <div class="sub">Certified for Official Draw, Pools &amp; Tournament Fixtures &bull; Date: ${dateStr}</div>
-    `;
+    let categoriesHtml = "";
 
     filteredGroups.forEach((group) => {
-      html += `
-        <div class="category-header">
-          DIVISION: ${group.division.toUpperCase()} &bull; GENDER: ${group.gender} &bull; WEIGHT CATEGORY: ${group.weightCategory.toUpperCase()} &nbsp;(${group.athletes.length} Athletes)
-        </div>
-        <table>
-          <thead>
+      const rowsHtml = group.athletes
+        .map(
+          (athlete) => `
+          <tr style="border-bottom:1pt solid #000000;">
+            <td width="50%" style="width:50%; border:1pt solid #000000; padding:6pt 10pt; font-family:Arial,sans-serif; font-size:10pt; font-weight:bold; color:#000000;">
+              ${athlete.athleteName}
+            </td>
+            <td width="50%" style="width:50%; border:1pt solid #000000; padding:6pt 10pt; font-family:Arial,sans-serif; font-size:9.5pt; color:#1E293B;">
+              ${athlete.academyName}
+            </td>
+          </tr>`
+        )
+        .join("");
+
+      categoriesHtml += `
+        <div style="margin-bottom:14pt; page-break-inside:avoid;">
+          <!-- Category Banner Table (Boxed like website) -->
+          <table width="100%" cellpadding="6" cellspacing="0" style="width:100%; border-collapse:collapse; background-color:#E2E8F0; border:2pt solid #000000; margin-bottom:2pt;">
             <tr>
-              <th style="width: 50%;">Athlete Name</th>
-              <th style="width: 50%;">Academy / Club Name</th>
+              <td style="padding:6pt 10pt; font-family:Arial,sans-serif; font-size:10pt; font-weight:bold; color:#000000; vertical-align:middle;">
+                DIVISION: <span style="font-weight:900;">${group.division.toUpperCase()}</span>
+                &nbsp;&nbsp;&bull;&nbsp;&nbsp;
+                GENDER: <span style="font-weight:900;">${group.gender}</span>
+                &nbsp;&nbsp;&bull;&nbsp;&nbsp;
+                <span style="background-color:#FFFFFF; border:1pt solid #000000; padding:2pt 6pt; font-weight:900; letter-spacing:0.5pt;">
+                  WEIGHT CATEGORY: ${group.weightCategory.toUpperCase()}
+                </span>
+              </td>
+              <td align="right" style="padding:6pt 10pt; font-family:'Courier New',Courier,monospace; font-size:9pt; font-weight:bold; color:#334155; text-align:right; vertical-align:middle; white-space:nowrap;">
+                ${group.athletes.length} ${group.athletes.length === 1 ? "Athlete" : "Athletes"}
+              </td>
             </tr>
-          </thead>
-          <tbody>
-      `;
+          </table>
 
-      group.athletes.forEach((athlete) => {
-        html += `
-          <tr>
-            <td class="athlete-name">${athlete.athleteName}</td>
-            <td>${athlete.academyName}</td>
-          </tr>
-        `;
-      });
-
-      html += `
-          </tbody>
-        </table>
+          <!-- Athlete Details Table (50% Athlete Name, 50% Academy Name) -->
+          <table width="100%" cellpadding="6" cellspacing="0" style="width:100%; border-collapse:collapse; border:1pt solid #000000; margin-bottom:8pt;">
+            <thead>
+              <tr style="background-color:#F1F5F9;">
+                <th width="50%" align="left" style="width:50%; border:1pt solid #000000; padding:6pt 10pt; font-family:Arial,sans-serif; font-size:9pt; font-weight:bold; text-transform:uppercase; color:#000000; background-color:#F1F5F9; text-align:left;">
+                  Athlete Name
+                </th>
+                <th width="50%" align="left" style="width:50%; border:1pt solid #000000; padding:6pt 10pt; font-family:Arial,sans-serif; font-size:9pt; font-weight:bold; text-transform:uppercase; color:#000000; background-color:#F1F5F9; text-align:left;">
+                  Academy / Club Name
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+        </div>
       `;
     });
 
-    html += `
-        <table class="sign-off" style="border: none; margin-top: 30px;">
-          <tr style="border: none;">
-            <td style="border: none; width: 50%; padding-top: 30px;">
-              <strong>Official Weigh-In Marshal:</strong><br><br>
-              _______________________________<br>
-              Signature / Stamp
-            </td>
-            <td style="border: none; width: 50%; text-align: right; padding-top: 30px;">
-              <strong>Tournament Jury / Director:</strong><br><br>
-              _______________________________<br>
-              Signature / Stamp
-            </td>
-          </tr>
-        </table>
+    const fullDocHtml = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head>
+        <meta charset='utf-8'>
+        <title>${championshipTitle} - Official Weigh-In Roster</title>
+        <!--[if gte mso 9]>
+        <xml>
+          <w:WordDocument>
+            <w:View>Print</w:View>
+            <w:Zoom>100</w:Zoom>
+            <w:DoNotOptimizeForBrowser/>
+          </w:WordDocument>
+        </xml>
+        <![endif]-->
+        <style>
+          @page Section1 {
+            size: 595.3pt 841.9pt; /* A4 */
+            margin: 36.0pt 36.0pt 36.0pt 36.0pt;
+            mso-header-margin: 35.4pt;
+            mso-footer-margin: 35.4pt;
+            mso-paper-source: 0;
+          }
+          div.Section1 {
+            page: Section1;
+          }
+          body {
+            font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+            font-size: 10pt;
+            color: #000000;
+            margin: 0;
+            padding: 0;
+            background-color: #FFFFFF;
+          }
+          p, div, td, th {
+            font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+          }
+          table {
+            border-collapse: collapse;
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+          }
+        </style>
+      </head>
+      <body lang="EN-US">
+        <div class="Section1">
+          <!-- Official Document Header -->
+          <table width="100%" cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; border-bottom:2.5pt solid #000000; margin-bottom:14pt; padding-bottom:8pt;">
+            <tr>
+              <td align="center" style="text-align:center; padding-bottom:10pt;">
+                <div style="font-size:18pt; font-weight:900; text-transform:uppercase; color:#000000; letter-spacing:0.5pt; line-height:1.2; font-family:Arial,sans-serif;">
+                  ${championshipTitle}
+                </div>
+                <div style="font-size:11.5pt; font-weight:bold; text-transform:uppercase; color:#1E293B; letter-spacing:1pt; margin-top:4pt; font-family:Arial,sans-serif;">
+                  Official Weigh-In Roster &mdash; Passed Athletes
+                </div>
+                <div style="font-size:8.5pt; font-weight:bold; text-transform:uppercase; color:#64748B; letter-spacing:0.8pt; margin-top:2pt; font-family:Arial,sans-serif;">
+                  Certified for Official Draw, Pools &amp; Tournament Fixtures
+                </div>
+                <div style="font-size:9pt; color:#475569; margin-top:6pt; font-family:'Courier New',Courier,monospace;">
+                  Total Qualified: <strong>${totalFilteredAthletes} Athletes</strong> &nbsp;&bull;&nbsp; Weight Classes: <strong>${filteredGroups.length}</strong> &nbsp;&bull;&nbsp; Date: <strong>${dateStr}</strong>
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Category Sections -->
+          ${categoriesHtml}
+
+          <!-- Official Signoff Footer -->
+          <table width="100%" cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse; border-top:1.5pt solid #000000; margin-top:24pt; padding-top:14pt; page-break-inside:avoid;">
+            <tr>
+              <td width="33%" valign="top" style="width:33%; padding-top:14pt; font-family:Arial,sans-serif; font-size:8.5pt;">
+                <strong style="text-transform:uppercase; font-size:9pt; color:#000000;">Official Weigh-In Marshal:</strong>
+                <br><br><br>
+                <div style="border-top:1pt dashed #94A3B8; width:80%; padding-top:4pt; color:#64748B; font-size:8pt;">
+                  Signature / Stamp
+                </div>
+              </td>
+              <td width="34%" align="center" valign="top" style="width:34%; text-align:center; padding-top:14pt; font-family:Arial,sans-serif; font-size:8.5pt;">
+                <strong style="text-transform:uppercase; font-size:9pt; color:#000000;">Certified Official Record</strong>
+                <br><br><br>
+                <div style="border-top:1pt dashed #94A3B8; width:80%; margin:0 auto; padding-top:4pt; color:#64748B; font-size:8pt;">
+                  Tournament Date &amp; Seal
+                </div>
+              </td>
+              <td width="33%" align="right" valign="top" style="width:33%; text-align:right; padding-top:14pt; font-family:Arial,sans-serif; font-size:8.5pt;">
+                <strong style="text-transform:uppercase; font-size:9pt; color:#000000;">Tournament Jury / Director:</strong>
+                <br><br><br>
+                <div style="border-top:1pt dashed #94A3B8; width:80%; margin-left:auto; padding-top:4pt; color:#64748B; font-size:8pt;">
+                  Signature / Stamp
+                </div>
+              </td>
+            </tr>
+          </table>
+        </div>
       </body>
       </html>
     `;
 
-    const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
+    const blob = new Blob([fullDocHtml], { type: "application/msword;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `Taekwondo_Passed_Roster_${new Date().toISOString().slice(0, 10)}.doc`;
+    const safeTitle = championshipTitle.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 32);
+    link.download = `${safeTitle}_Passed_Roster_${new Date().toISOString().slice(0, 10)}.doc`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -414,10 +518,13 @@ function PrintPassedContent() {
         <div className="print-document bg-white text-black p-8 sm:p-12 rounded-xl shadow-2xl max-w-[210mm] mx-auto min-h-[297mm]">
           {/* Official Document Header */}
           <div className="border-b-2 border-black pb-4 mb-6 text-center">
-            <h2 className="text-2xl font-black tracking-wider uppercase text-black">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-wider uppercase text-black">
+              {championshipTitle}
+            </h1>
+            <h2 className="text-sm sm:text-base font-bold text-slate-800 uppercase tracking-widest mt-1">
               Official Weigh-In Roster — Passed Athletes
             </h2>
-            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mt-1">
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-widest mt-0.5">
               Certified for Official Draw, Pools &amp; Tournament Fixtures
             </p>
             <div className="flex items-center justify-center gap-4 text-[11px] text-gray-600 mt-2 font-mono">
